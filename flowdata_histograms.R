@@ -304,6 +304,10 @@ triplets <- extractTriplets(df2$SortBucket)
 triplets
 deltatriplets<- extractTriplets(df2$DeltaBucket)
 deltatriplets
+#Alternative to pull out longer sequences
+df3<-which(diff(as.numeric(rownames(df1)))==1)
+a<-split(df3, cumsum(c(1, diff(df3) != 1))) #NOW WHAT?
+
 fname <-paste0(da,"_sequence.csv")
 write.table(deltatriplets, file.path(mydir,fname), sep=",")
 
