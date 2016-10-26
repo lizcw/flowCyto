@@ -7,7 +7,13 @@ library("flowCore")
 ################################################################
 #Read data file
 mydir <- 'D:\\lizcw\\Projects\\RProjects'
-datafiles <-c('16092016_rainbow med_002.fcs','10102016_Rainbow6a_003.fcs','10102016_Rainbow6a_004.fcs','10102016_Rainbow6a_005.fcs')
+mydir <- 'D:\\Projects\\FlowCytoData\\data'
+datafilelist <-c('16092016_rainbow med_002.fcs',
+                 '10102016_Rainbow6a_003.fcs',
+                 '10102016_Rainbow6a_004.fcs',
+                 '10102016_Rainbow6a_005.fcs',
+                 '25102016_rainbow1.fcs',
+                 '25102016_rainbow1_001.fcs')
 
 
 
@@ -36,8 +42,8 @@ dropphase <- function(dp){
 
 #Get previous distance
 prevdist <- function(dropPhaseBits){
-  prevdist <- bitwAnd(bitwShiftL(dropPhaseBits, 4), 0xfff)
-  return(prevdist)
+  prevdist <- bitwAnd(bitwShiftL(dropPhaseBits, 4), 0xffff)
+  return(log2(prevdist))
 }
 
 #Classifier sorts to a bucket number
@@ -140,12 +146,69 @@ multiplot <- function(p1,p2,p3,p4=NULL, cols=1, layout=NULL, pagetitle="Histogra
    
   }
 }
+
+#With 2 IN SEQUENCE
+filter2Sequential <- function(d){
+  keep <- c() #TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, TRUE)
+  c <- 1
+  for(i in 1:(nrow(d)-2)){
+    if (i == c){
+      row1 <- rownames(d)[c]
+      row2 <- rownames(d)[c+1]
+      if (as.numeric(row2) - as.numeric(row1) == 1 ){ 
+        print(paste("i=",i," row1=", row1," row2=", row2," row3=", row3))
+        keep <- c(keep, TRUE,TRUE,TRUE)
+        c <- c+2
+      }else{
+        keep <- c(keep, FALSE)
+        c <- c+1
+      }
+    }
+  }
+  return(d[keep,])
+}
+
+
+#With 3 IN SEQUENCE
+filter3Sequential <- function(d){
+  keep <- c() #TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, TRUE)
+  c <- 1
+  for(i in 1:(nrow(d)-3)){
+    if (i == c){
+      row1 <- rownames(d)[c]
+      row2 <- rownames(d)[c+1]
+      row3 <- rownames(d)[c+2]
+      if ((as.numeric(row2) - as.numeric(row1) == 1 ) && (as.numeric(row3) - as.numeric(row2) == 1 )){ 
+        print(paste("i=",i," row1=", row1," row2=", row2," row3=", row3))
+        keep <- c(keep, TRUE,TRUE,TRUE)
+        
+        c <- c+3
+      }else{
+        keep <- c(keep, FALSE)
+        c <- c+1
+      }
+    }
+  }
+  return(d[keep,])
+}
+
+#Extract triplet bins in sequence per column data
+extractTriplets <- function(dfcol){
+  t <-c()
+  i <- 1
+  while(i < (length(dfcol)-3)){
+    t <-rbind(t,dfcol[c(i,i+1,i+2)])
+    i<-i+3
+  }
+  return(t)
+}
+
 ########################## MAIN ####################################
 
 
 ##################
-#for (da in datafiles){
-da = datafilelist[1]
+for (da in datafilelist){
+#da = datafilelist[1]
 testdata1 <- file.path(mydir,da)
 x1 = read.FCS(testdata1,alter.names=TRUE,transformation = FALSE)
 summary(x1)
@@ -173,6 +236,7 @@ timemax25 <- quantile(df$DeltaTime)[[2]] #25% in this time interval
 deltaBucketShort <- unlist(diffbucket(df$SortBucket,TRUE, df$DeltaTime, timemax25))
 df$DeltaBucketShort <-c(0,deltaBucketShort)
 df$SortStatus <-mapply(sortstatus,df$ClassBucket,df$SortBucket, df$DropphaseNum)
+df$Prev <-mapply(prevdist, df$Drop.Phase)
 shortdf <- subset(df,DeltaTime <= timemax25)
 #shortdf<-deltaBucketShort[!is.nan(deltaBucketShort)]
 #Output Table
@@ -183,7 +247,7 @@ count(df$DeltaBucketSorted)
 count(df$DeltaBucketShort)
 count(df$SortStatus)
 count(df$DropphaseNum)
-
+count(df$Prev)
 #Subset swings of 5 or 6 - view sequence of prev/post 4 swings and/or status aborted
 fields<-c('DropphaseNum', 'ClassBucket','SortBucket','ElapsedTime','DeltaTime','DeltaBucket', 'SortStatus')
 swinglimit <- 4
@@ -227,5 +291,21 @@ gp4<- ggplot(as.data.frame(ptable), aes(x=Var2, y=Freq,fill=Var1, group="Sort st
  
 
 multiplot(gp1, gp2, gp3, gp4,cols=2, pagetitle=da)
+#####pAUSE IN LOOP
+cat ("Press [enter] to continue")
+line <- readline()
+#############################################################
+#Extract sequence data
+df1 <- df[df$DeltaTime<=40,] #Within one drop limit
+df1 <- df1[df1$SortStatus=="sorted",]
+#only sequential data
+df2 <-filter3Sequential(df1)
+triplets <- extractTriplets(df2$SortBucket)
+triplets
+deltatriplets<- extractTriplets(df2$DeltaBucket)
+deltatriplets
+fname <-paste0(da,"_sequence.csv")
+write.table(deltatriplets, file.path(mydir,fname), sep=",")
 
 
+}
