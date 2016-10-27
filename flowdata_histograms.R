@@ -203,12 +203,17 @@ extractTriplets <- function(dfcol){
   return(t)
 }
 
+aacount <- function(a){
+  b<-length(a)
+  return(b)
+}
+
 ########################## MAIN ####################################
 
 
 ##################
-for (da in datafilelist){
-#da = datafilelist[1]
+#for (da in datafilelist){
+da = datafilelist[1]
 testdata1 <- file.path(mydir,da)
 x1 = read.FCS(testdata1,alter.names=TRUE,transformation = FALSE)
 summary(x1)
@@ -307,9 +312,13 @@ deltatriplets
 #Alternative to pull out longer sequences
 df3<-which(diff(as.numeric(rownames(df1)))==1)
 a<-split(df3, cumsum(c(1, diff(df3) != 1))) #NOW WHAT?
+a1 <- mapply(aacount,a)
+title <- paste("Sequence lengths")
+qplot(a1, geom="histogram", xlab="Sequence length", ylab="Count", ggtitle=title) 
 
+#Write to file
 fname <-paste0(da,"_sequence.csv")
 write.table(deltatriplets, file.path(mydir,fname), sep=",")
 
 
-}
+#}
