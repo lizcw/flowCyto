@@ -196,7 +196,7 @@ filter3Sequential <- function(d){
 extractTriplets <- function(dfcol){
   t <-c()
   i <- 1
-  while(i < (length(dfcol))){
+  while(i < (length(dfcol)-3)){
     t <-rbind(t,dfcol[c(i,i+1,i+2)])
     i<-i+3
   }
@@ -213,7 +213,7 @@ aacount <- function(a){
 
 ##################
 #for (da in datafilelist){
-da = datafilelist[6]
+da = datafilelist[5]
 testdata1 <- file.path(mydir,da)
 x1 = read.FCS(testdata1,alter.names=TRUE,transformation = FALSE)
 summary(x1)
@@ -224,7 +224,8 @@ df <- data.frame(exprs(x1)[,1:10])
 #Generate delta time and elapsed time
 df$TimeCalc <-apply(df[,c('Time.1','Time.2','Time.3')], 1,function(d){0.017625*(((d[3]*65536*65536)+(d[2]*65536)+d[1]))})
 deltaTime <-diff(df$TimeCalc)
-df$DeltaTime <-c(0,deltaTime)
+df$DeltaTime <-c(deltaTime,0) #post drop interval
+#df$DeltaTime <-c(0,deltaTime) #previous drop interval
 starttime <- df$TimeCalc[1]
 df$ElapsedTime <-mapply(elapsed,df$TimeCalc,starttime)
 timemax <- max(df$DeltaTime)
@@ -243,87 +244,33 @@ df$DeltaBucketShort <-c(0,deltaBucketShort)
 df$SortStatus <-mapply(sortstatus,df$ClassBucket,df$SortBucket, df$DropphaseNum)
 df$Prev <-mapply(prevdist, df$Drop.Phase)
 shortdf <- subset(df,DeltaTime <= timemax25)
-#shortdf<-deltaBucketShort[!is.nan(deltaBucketShort)]
-#Output Table
-count(df$ClassBucket)
-count(df$SortBucket)
-count(df$DeltaBucket)
-count(df$DeltaBucketSorted)
-count(df$DeltaBucketShort)
-count(df$SortStatus)
-count(df$DropphaseNum)
-count(df$Prev)
-#Subset swings of 5 or 6 - view sequence of prev/post 4 swings and/or status aborted
-fields<-c('DropphaseNum', 'ClassBucket','SortBucket','ElapsedTime','DeltaTime','DeltaBucket', 'SortStatus')
-swinglimit <- 4
-largeswings <- subset(shortdf[,fields],abs(DeltaBucket) > swinglimit)
-largeswings
-smallswings <- subset(shortdf[,fields],abs(DeltaBucket) > 0 & abs(DeltaBucket) <= swinglimit)
-smallswings
-#Compare relative counts of status for each
-xsmall <- count(smallswings$SortStatus)
-xlarge <- count(largeswings$SortStatus)
-resultdata <-matrix(c(xsmall[,2],xlarge[,2]),ncol=2,byrow=FALSE)
-colnames(resultdata) <- c('SmallSwings','LargeSwings')
-rownames(resultdata) <- xsmall[,1]
-resulttable <- as.table(resultdata)
-ptable <-prop.table(resulttable,2)
-res <-barplot(ptable, legend=TRUE,beside=TRUE)
-#text(res$mids, res$density, res$counts, col = "red")
-ptable
-##Plots
-title1 <- paste("Bin Counts")
-gp1 <-ggplot(df) + geom_histogram(aes(x=ClassBucket, group=1),binwidth=.5,colour="black",fill="white")+
-  geom_histogram(binwidth=.5,aes(x=SortBucket),colour="black",fill="blue") +
-  xlab("Bin number") + ylab("Count") +ggtitle(title1)+ 
-  scale_x_continuous(breaks=seq(1,6))
 
-title2 <- paste("Drop phase Counts")
-gp2 <- ggplot(df) + geom_histogram(aes(x=DropphaseNum, group=1),binwidth=.5,colour="black",fill="red") +
-  xlab("Drop phase number") + ylab("Count")+ ggtitle(title2) + 
-  scale_x_continuous(breaks=seq(0,15))
 
-title3 <- paste("Swing Counts")
-gp3 <- ggplot(df) + geom_histogram(aes(x=DeltaBucketSorted, group=1),binwidth=.5,colour="black",fill="red") +
-  geom_histogram(aes(x=DeltaBucketShort),binwidth=.5,colour="black",fill="blue") +
-  xlab("Bucket swing") + ylab("Count")+ ggtitle(title3) + 
-  scale_x_continuous(breaks=seq(-5,5)) 
-
-title4 <- paste("Aborts by Swing Size")
-gp4<- ggplot(as.data.frame(ptable), aes(x=Var2, y=Freq,fill=Var1, group="Sort status")) + geom_bar(stat="identity") +
-  xlab("Bucket swing") + ylab("Frequency")+ ggtitle(title4)+ guides(fill=guide_legend(title=NULL)) #+ 
- # scale_fill_discrete(names="Sort Status")+ theme(legend.position="top")
- 
-
-multiplot(gp1, gp2, gp3, gp4,cols=2, pagetitle=da)
-#####pAUSE IN LOOP
-#cat ("Press [enter] to continue")
-#line <- readline()
 #############################################################
 #Extract sequence data
-#df1 <- df[df$DeltaTime<=40,] #Within one drop limit
-df1 <- df[df$SortStatus=="sorted",]
-#only sequential data
+df1 <- df[df$DeltaTime<=43,] #Within one drop limit
+df1 <- df1[df1$SortStatus=="sorted",]
 df2 <-filter3Sequential(df1)
-triplets <- extractTriplets(df2$SortBucket)
-triplets
 deltatriplets<- extractTriplets(df2$DeltaBucket)
 deltatriplets
-#Alternative to pull out longer sequences
+#Write to file
+fname <-paste0(da,"_sequences.csv")
+write.table(deltatriplets, file.path(mydir,fname), sep=",")
+#Pull out longer sequences
 df3<-which(diff(as.numeric(rownames(df1)))==1)
-a<-split(df3, cumsum(c(1, diff(df3) != 1))) 
+a<-split(df3, cumsum(c(0, diff(df3) != 1))) ##INCORRECT - SKIPPING INFO
 a1 <- mapply(aacount,a)
 title <- paste("Sequence lengths for ", da)
 m <- count(a1)
-#Select sequences with 6 in a row
-a[which(a1==6)]
-#qplot(m, geom="histogram", xlab="Sequence length", ylab="Count", main=title, xlim=c(1,max(a1)), ylim=(c(0,300))) 
 
-#Write to file
-fname <-paste0(da,"_sequence.csv")
-write.table(deltatriplets, file.path(mydir,fname), sep=",")
+#Select sequences with 6 in a row
+#t1 <- matrix(c(a[which(a1==1)],a[which(a1==2)],a[which(a1==3)],a[which(a1==4)],a[which(a1==5)],a[which(a1==6)]),ncol=6,byrow=FALSE)
+
+
+
 
 #####pAUSE IN LOOP
 #cat ("Press [enter] to continue")
 #line <- readline()
 #}
+
